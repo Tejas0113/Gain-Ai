@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -41,7 +41,7 @@ interface WorkoutPlan {
 interface FormData {
   bodyFatPercent: number | null
   fitnessGoal: string | null
-  secondaryGoal: string | null
+  secondaryGoal: string[]
   experienceLevel: string | null
   daysPerWeek: number | null
   injuryInfo: string
@@ -53,16 +53,32 @@ export function WorkoutPlannerForm({ userId, existingBodyFat, onComplete }: Prop
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [gender, setGender] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>({
     bodyFatPercent: existingBodyFat ?? null,
     fitnessGoal: null,
-    secondaryGoal: null,
+    secondaryGoal: [],
     experienceLevel: null,
     daysPerWeek: null,
     injuryInfo: '',
     lifestyle: null,
     athleteType: null,
   })
+
+  // Fetch gender early so Step 3 / Step 4 can show gender-specific options
+  useEffect(() => {
+    const fetchGender = async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('gender')
+        .eq('id', userId)
+        .single()
+
+      setGender(data?.gender ?? null)
+    }
+
+    fetchGender()
+  }, [userId])
 
   const updateFormData = (updates: Partial<FormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }))
@@ -100,7 +116,7 @@ export function WorkoutPlannerForm({ userId, existingBodyFat, onComplete }: Prop
           user_id: userId,
           body_fat_percent: formData.bodyFatPercent,
           fitness_goal: formData.fitnessGoal,
-          secondary_goal: formData.secondaryGoal,
+          secondary_goal: formData.secondaryGoal.length ? formData.secondaryGoal.join(', ') : null,
           experience_level: formData.experienceLevel,
           days_per_week: formData.daysPerWeek,
           injury_info: formData.injuryInfo || null,
@@ -115,7 +131,7 @@ export function WorkoutPlannerForm({ userId, existingBodyFat, onComplete }: Prop
     // Build Gemini prompt
     const prompt = `You are an expert personal trainer. Create a weekly workout plan as JSON only. Return raw JSON with no markdown formatting and no code blocks.
 
-User details: age ${age}, gender ${gender || 'not specified'}, weight ${weight}kg, height ${height}cm, body fat ${formData.bodyFatPercent}%, main goal: ${formData.fitnessGoal}, secondary goal: ${formData.secondaryGoal || 'none'}, experience: ${formData.experienceLevel}, training days per week: ${formData.daysPerWeek}, lifestyle: ${formData.lifestyle}, training style: ${formData.athleteType}, injuries or limitations: ${formData.injuryInfo || 'none'}.
+User details: age ${age}, gender ${gender || 'not specified'}, weight ${weight}kg, height ${height}cm, body fat ${formData.bodyFatPercent}%, main goal: ${formData.fitnessGoal}, secondary goals: ${formData.secondaryGoal.length ? formData.secondaryGoal.join(', ') : 'none'}, experience: ${formData.experienceLevel}, training days per week: ${formData.daysPerWeek}, lifestyle: ${formData.lifestyle}, training style: ${formData.athleteType}, injuries or limitations: ${formData.injuryInfo || 'none'}.
 
 Important: Design the workout plan specifically following how a ${formData.athleteType} trains — the exercise selection, rep ranges, rest periods, and weekly structure should reflect this athlete type.
 
@@ -293,6 +309,7 @@ Return exactly this JSON structure and nothing else:
           <Step3TrainingStyle
             selected={formData.athleteType}
             onChange={(athleteType) => updateFormData({ athleteType })}
+            gender={gender}
           />
         )}
         {currentStep === 4 && (
@@ -300,6 +317,7 @@ Return exactly this JSON structure and nothing else:
             selected={formData.secondaryGoal}
             onChange={(secondaryGoal) => updateFormData({ secondaryGoal })}
             onSkip={() => handleNext()}
+            gender={gender}
           />
         )}
         {currentStep === 5 && (
@@ -435,28 +453,51 @@ function Step2Goal({
 function Step3TrainingStyle({
   selected,
   onChange,
+  gender,
 }: {
   selected: string | null
   onChange: (athleteType: string) => void
+  gender: string | null
 }) {
-  const athleteTypes = [
-    {
-      name: 'Hybrid Athlete',
-      description: 'A balanced mix of strength training and cardio. Build muscle while improving endurance and overall athleticism.',
-    },
-    {
-       name: 'Bodybuilder',
-      description: 'Focus on muscle hypertrophy and aesthetics. High volume training to maximize muscle size and definition.',
-    },
-    {
-      name: 'Calisthenics Athlete',
-      description: 'Master your bodyweight. Build strength, control, and muscle using only bodyweight movements and minimal equipment.',
-    },
-    {
-      name: 'Feminine Strength',
-      description: 'Sculpt and strengthen with a focus on glutes, legs, and upper body toning. A balanced mix of resistance training designed specifically for women.',
-    },
-  ]
+  const isFemale = gender === 'Female'
+
+  const athleteTypes = isFemale
+    ? [
+        {
+          name: "🌸 Women's Fitness",
+          description: 'Designed for women focusing on strength, toning, fat loss, and overall fitness. Build lean muscle while improving confidence, endurance, and mobility.',
+        },
+        {
+          name: '🍑 Glute Builder',
+          description: 'Prioritize glute growth and lower body development with progressive strength training for stronger legs, hips, and core.',
+        },
+        {
+          name: '🔥 Lean & Toned',
+          description: 'Burn body fat while building lean muscle for a strong, athletic, and toned physique.',
+        },
+        {
+          name: "💪 Women's Strength",
+          description: 'Increase full-body strength with resistance training while improving posture, bone health, and daily performance.',
+        },
+      ]
+    : [
+        {
+          name: 'Hybrid Athlete',
+          description: 'A balanced mix of strength training and cardio. Build muscle while improving endurance and overall athleticism.',
+        },
+        {
+          name: 'Bodybuilder',
+          description: 'Focus on muscle hypertrophy and aesthetics. High volume training to maximize muscle size and definition.',
+        },
+        {
+          name: 'Calisthenics Athlete',
+          description: 'Master your bodyweight. Build strength, control, and muscle using only bodyweight movements and minimal equipment.',
+        },
+        {
+          name: 'Endurance',
+          description: 'Improve cardiovascular fitness, stamina, and recovery to perform better in longer workouts, running, cycling, and sports.',
+        },
+      ]
 
   return (
     <div className="space-y-4">
@@ -491,24 +532,46 @@ function Step4SecondaryGoal({
   selected,
   onChange,
   onSkip,
+  gender,
 }: {
-  selected: string | null
-  onChange: (goal: string) => void
+  selected: string[]
+  onChange: (goals: string[]) => void
   onSkip: () => void
+  gender: string | null
 }) {
-  const goals = [
-    { id: 'Six Pack' },
-    { id: 'Bigger Arms' },
-    { id: 'Wider Shoulders' },
-    { id: 'Improve Cardio' },
-    { id: 'Wider neck' },
-    { id: 'Better Chest' },
-    { id: 'Leg Strength' },
-  ]
+  const isFemale = gender === 'Female'
+
+  const goals = isFemale
+    ? [
+        { id: 'Lose Fat' },
+        { id: 'Build Glutes' },
+        { id: 'Tone Body' },
+        { id: 'Gain Muscle' },
+        { id: 'Improve Strength' },
+        { id: 'Improve Fitness' },
+      ]
+    : [
+        { id: 'Six Pack' },
+        { id: 'Bigger Arms' },
+        { id: 'Wider Shoulders' },
+        { id: 'Improve Cardio' },
+        { id: 'Wider neck' },
+        { id: 'Better Chest' },
+        { id: 'Leg Strength' },
+      ]
+
+  const toggleGoal = (id: string) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((g) => g !== id))
+    } else if (selected.length < 3) {
+      onChange([...selected, id])
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Pick up to 3</p>
         <button
           onClick={onSkip}
           className="text-muted-foreground text-sm font-medium hover:text-foreground"
@@ -518,22 +581,26 @@ function Step4SecondaryGoal({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {goals.map(({ id, emoji }) => (
-          <button
-            key={id}
-            onClick={() => onChange(id)}
-            className={`p-4 rounded-xl border-2 text-center transition ${
-              selected === id
-                ? 'border-[#00ff88] bg-[#00ff88]/10'
-                : 'border-border bg-card hover:border-border/80'
-            }`}
-          >
-            <p className="text-2xl mb-2">{emoji}</p>
-            <p className={`text-sm font-semibold text-foreground`}>
-              {id}
-            </p>
-          </button>
-        ))}
+        {goals.map(({ id }) => {
+          const isSelected = selected.includes(id)
+          const isMaxed = !isSelected && selected.length >= 3
+          return (
+            <button
+              key={id}
+              onClick={() => toggleGoal(id)}
+              disabled={isMaxed}
+              className={`p-4 rounded-xl border-2 text-center transition ${
+                isSelected
+                  ? 'border-[#00ff88] bg-[#00ff88]/10'
+                  : 'border-border bg-card hover:border-border/80'
+              } ${isMaxed ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+              <p className="text-sm font-semibold text-foreground">
+                {id}
+              </p>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
