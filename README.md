@@ -121,7 +121,7 @@ npm run dev
 
 ---
 
-## Author
+## Cosmos
 
-Built by **Prince** — solo founder building [Cosmos](https://github.com/heyPrakash).
+Founder **Prince** — 
 
