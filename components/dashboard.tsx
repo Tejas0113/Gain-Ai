@@ -464,7 +464,7 @@ export function Dashboard() {
           icon={Activity}
           label='Body Fat'
           value={bodyScan?.body_fat ? `${bodyScan.body_fat}%` : 'No scan yet'}
-          subtitle='latest reading'
+          subtitle={bodyScan?.body_type ? `latest reading · ${bodyScan.body_type}` : 'latest reading'}
         />
       </div>
 
